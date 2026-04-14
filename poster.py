@@ -1,5 +1,5 @@
 import os, anthropic, tweepy
-from datetime import datetime
+from datetime import datetime, timedelta
 
 def generate(prompt):
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -35,62 +35,54 @@ def post(tweet_text, image_path=None):
     return {"tweet_id": tweet_id, "url": url, "tweet_text": tweet_text, "has_image": bool(media_ids)}
 
 def build_event_prompt(analysis):
-    today = analysis["today"]
-    tomorrow = analysis["tomorrow"]
-    weekday = analysis["weekday"]
-    stats = analysis["data_stats"]
+    now = datetime.now()
+    today = now.strftime("%Y年%m月%d日")
+    weekday = ["月","火","水","木","金","土","日"][now.weekday()]
+    tomorrow = (now + timedelta(days=1)).strftime("%Y年%m月%d日")
+    tomorrow_short = (now + timedelta(days=1)).strftime("%m月%d日")
 
-    # アツいホール3店舗
+    def fmt(items, key):
+        return "\n".join(f"  ・{i[key]}（{i['cnt']}回）" for i in items) or "  （データ蓄積中）"
+
     halls_txt = ""
-    for i, h in enumerate(analysis["hot_halls"], 1):
-        halls_txt += f"  {i}. {h['hall_name']}（過去{h['total_cnt']}回開催 / 直近30日{h['recent_cnt']}回）\n"
+    for i, h in enumerate(analysis.get("hot_halls", []), 1):
+        halls_txt += f"  {i}. {h['hall_name']}（過去{h['total_cnt']}回 / 直近30日{h['recent_cnt']}回）\n"
     if not halls_txt: halls_txt = "  （データ蓄積中）\n"
 
-    # 明日のイベント
-    tomorrow_txt = ""
-    for e in analysis["tomorrow_events"]:
-        tomorrow_txt += f"  ・{e['hall_name']} 「{e['event_name']}」\n"
-    if not tomorrow_txt: tomorrow_txt = "  （なし）\n"
-
-    # 今日のイベント
-    today_txt = ""
-    for e in analysis["today_events"]:
-        today_txt += f"  ・{e['hall_name']} 「{e['event_name']}」\n"
-    if not today_txt: today_txt = "  （なし）\n"
-
-    # 曜日のアツいイベント
-    weekday_txt = ""
-    for e in analysis["weekday_hot"][:3]:
-        weekday_txt += f"  ・{e['event_name']}（{e['cnt']}回）\n"
-    if not weekday_txt: weekday_txt = "  （データ蓄積中）\n"
+    tomorrow_txt = "\n".join(f"  ・{e['hall_name']} 「{e['event_name']}」" for e in analysis.get("tomorrow_events", [])) or "  （なし）"
+    today_txt = "\n".join(f"  ・{e['hall_name']} 「{e['event_name']}」" for e in analysis.get("today_events", [])) or "  （なし）"
+    weekday_txt = "\n".join(f"  ・{e['event_name']}（{e['cnt']}回）" for e in analysis.get("weekday_hot", [])[:3]) or "  （データ蓄積中）"
+    stats = analysis.get("data_stats", {})
 
     return f"""あなたはパチンコ・パチスロ情報を発信するXアカウントです。
-過去データの分析から本日 {today}（{weekday}曜日）のアツい情報をツイートしてください。
+以下のデータをもとに本日 {today}（{weekday}曜日）のアツい情報をツイートしてください。
 
 【過去データから選んだアツいホールTOP3】
 {halls_txt}
-【本日のイベント】
+【本日 {today} のイベント】
 {today_txt}
-【明日 {tomorrow} のイベント】
+【明日 {tomorrow_short} のイベント】
 {tomorrow_txt}
 【{weekday}曜日によく開催されるアツいイベント】
 {weekday_txt}
-【データ蓄積】{stats['total_events']}件 / {stats['days_accumulated']}日分
+【データ蓄積】{stats.get('total_events',0)}件 / {stats.get('days_accumulated',0)}日分
 
 【ルール】
 - ツイート本文のみ出力
 - 280文字以内
 - 絵文字で読みやすく
-- アツいホール3店舗を具体的に名前を出して紹介
+- 必ず「本日{today}」と正確な日付を入れる
+- アツいホール3店舗を具体的に紹介
 - 明日のイベントがあれば必ず入れる
-- ハッシュタグ4〜5個（#パチンコ #スロット #イベント情報 #今日のアツ台 #明日のイベント など）
-- データが少ない場合も工夫して書く"""
+- ハッシュタグ4〜5個（#パチンコ #スロット #イベント情報 #今日のアツ台 #明日のイベント）"""
 
 def build_raiten_prompt(raiten_list):
-    today = datetime.now().strftime("%Y年%m月%d日")
+    now = datetime.now()
+    today = now.strftime("%Y年%m月%d日")
+    weekday = ["月","火","水","木","金","土","日"][now.weekday()]
     lines = "\n".join(f"  ・{r['talent_name']} → {r['hall_name']}（{r.get('visit_date','')}）" for r in raiten_list[:5])
     return f"""あなたはパチンコ・パチスロ情報を発信するXアカウントです。
-本日 {today} の来店イベント情報をツイートしてください。
+本日 {today}（{weekday}曜日）の来店イベント情報をツイートしてください。
 
 【本日の来店情報】
 {lines}
@@ -99,6 +91,7 @@ def build_raiten_prompt(raiten_list):
 - ツイート本文のみ出力
 - 280文字以内
 - 絵文字で華やかに
+- 必ず「本日{today}」と正確な日付を入れる
 - 誰がどこに来るか明確に
 - ハッシュタグ: #来店情報 #パチンコ #スロット と来店者名・店名
 - ファンが行きたくなる熱量で書く"""
