@@ -42,7 +42,7 @@ jobs:
           PREFECTURE_CODE: "14"
           PREFECTURE_HINT: "神奈川"
           SCRAPE_PAGES: "5"
-          DRY_RUN: "true"
+          DRY_RUN: "false"
         run: python run.py
 
       - name: DB・ログをアーティファクト保存
