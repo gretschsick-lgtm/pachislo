@@ -18,6 +18,8 @@ jobs:
           path: data/events.db
           key: pachinko-db-tokyo-${{ github.run_number }}
           restore-keys: pachinko-db-tokyo-
+      - name: DBリセット
+        run: rm -f data/events.db
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -56,6 +58,8 @@ jobs:
           path: data/events.db
           key: pachinko-db-kanagawa-${{ github.run_number }}
           restore-keys: pachinko-db-kanagawa-
+      - name: DBリセット
+        run: rm -f data/events.db
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -94,6 +98,8 @@ jobs:
           path: data/events.db
           key: pachinko-db-saitama-${{ github.run_number }}
           restore-keys: pachinko-db-saitama-
+      - name: DBリセット
+        run: rm -f data/events.db
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -132,6 +138,8 @@ jobs:
           path: data/events.db
           key: pachinko-db-tokyo-${{ github.run_number }}
           restore-keys: pachinko-db-tokyo-
+      - name: DBリセット
+        run: rm -f data/events.db
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -170,6 +178,8 @@ jobs:
           path: data/events.db
           key: pachinko-db-kanagawa-${{ github.run_number }}
           restore-keys: pachinko-db-kanagawa-
+      - name: DBリセット
+        run: rm -f data/events.db
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -208,6 +218,8 @@ jobs:
           path: data/events.db
           key: pachinko-db-saitama-${{ github.run_number }}
           restore-keys: pachinko-db-saitama-
+      - name: DBリセット
+        run: rm -f data/events.db
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
