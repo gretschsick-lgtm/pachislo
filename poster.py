@@ -34,34 +34,28 @@ def post(tweet_text, image_path=None):
     print(f"[poster] 投稿完了: {url}")
     return {"tweet_id": tweet_id, "url": url, "tweet_text": tweet_text, "has_image": bool(media_ids)}
 
-def build_event_prompt(analysis):
+def build_yokoku_prompt(analysis, pref_hint="東京"):
     now = datetime.now()
     today = now.strftime("%Y年%m月%d日")
     weekday = ["月","火","水","木","金","土","日"][now.weekday()]
     tomorrow = (now + timedelta(days=1)).strftime("%Y年%m月%d日")
     tomorrow_short = (now + timedelta(days=1)).strftime("%m月%d日")
 
-    def fmt(items, key):
-        return "\n".join(f"  ・{i[key]}（{i['cnt']}回）" for i in items) or "  （データ蓄積中）"
-
     halls_txt = ""
-    for i, h in enumerate(analysis.get("hot_halls", []), 1):
+    for i, h in enumerate(analysis.get("hot_halls", [])[:3], 1):
         halls_txt += f"  {i}. {h['hall_name']}（過去{h['total_cnt']}回 / 直近30日{h['recent_cnt']}回）\n"
     if not halls_txt: halls_txt = "  （データ蓄積中）\n"
 
     tomorrow_txt = "\n".join(f"  ・{e['hall_name']} 「{e['event_name']}」" for e in analysis.get("tomorrow_events", [])) or "  （なし）"
-    today_txt = "\n".join(f"  ・{e['hall_name']} 「{e['event_name']}」" for e in analysis.get("today_events", [])) or "  （なし）"
     weekday_txt = "\n".join(f"  ・{e['event_name']}（{e['cnt']}回）" for e in analysis.get("weekday_hot", [])[:3]) or "  （データ蓄積中）"
     stats = analysis.get("data_stats", {})
 
     return f"""あなたはパチンコ・パチスロ情報を発信するXアカウントです。
-以下のデータをもとに本日 {today}（{weekday}曜日）のアツい情報をツイートしてください。
+{pref_hint}エリアの明日 {tomorrow_short} のアツいイベント予告ツイートを作成してください。
 
-【過去データから選んだアツいホールTOP3】
+【{pref_hint}エリアの過去データからアツいホールTOP3】
 {halls_txt}
-【本日 {today} のイベント】
-{today_txt}
-【明日 {tomorrow_short} のイベント】
+【明日 {tomorrow_short} の予告イベント】
 {tomorrow_txt}
 【{weekday}曜日によく開催されるアツいイベント】
 {weekday_txt}
@@ -71,27 +65,56 @@ def build_event_prompt(analysis):
 - ツイート本文のみ出力
 - 280文字以内
 - 絵文字で読みやすく
-- 必ず「本日{today}」と正確な日付を入れる
+- 必ず「明日{tomorrow_short}」と日付を入れる
+- {pref_hint}エリアであることを明記
 - アツいホール3店舗を具体的に紹介
-- 明日のイベントがあれば必ず入れる
-- ハッシュタグ4〜5個（#パチンコ #スロット #イベント情報 #今日のアツ台 #明日のイベント）"""
+- ハッシュタグ4〜5個（#パチンコ #スロット #{pref_hint} #明日のイベント #パチスロ）"""
 
-def build_raiten_prompt(raiten_list):
+def build_matome_prompt(matome, pref_hint="東京"):
     now = datetime.now()
     today = now.strftime("%Y年%m月%d日")
     weekday = ["月","火","水","木","金","土","日"][now.weekday()]
-    lines = "\n".join(f"  ・{r['talent_name']} → {r['hall_name']}（{r.get('visit_date','')}）" for r in raiten_list[:5])
-    return f"""あなたはパチンコ・パチスロ情報を発信するXアカウントです。
-本日 {today}（{weekday}曜日）の来店イベント情報をツイートしてください。
 
-【本日の来店情報】
+    halls_txt = ""
+    for i, h in enumerate(matome[:3], 1):
+        halls_txt += f"  {i}. {h['hall_name']} 「{h['events']}」（{h['cnt']}件の話題）\n"
+    if not halls_txt: halls_txt = "  （データなし）\n"
+
+    return f"""あなたはパチンコ・パチスロ情報を発信するXアカウントです。
+{pref_hint}エリアの本日 {today} のアツかったイベントまとめツイートを作成してください。
+
+【本日Xで話題になった{pref_hint}のホールTOP3】
+{halls_txt}
+
+【ルール】
+- ツイート本文のみ出力
+- 280文字以内
+- 絵文字で読みやすく
+- 必ず「本日{today}」と日付を入れる
+- {pref_hint}エリアであることを明記
+- 「今日アツかった」「話題になった」という表現を使う
+- ハッシュタグ4〜5個（#パチンコ #スロット #{pref_hint} #今日のアツ台 #パチスロ）"""
+
+def build_raiten_prompt(raiten_list, pref_hint="東京"):
+    now = datetime.now()
+    tomorrow = (now + timedelta(days=1)).strftime("%Y年%m月%d日")
+    tomorrow_short = (now + timedelta(days=1)).strftime("%m月%d日")
+    lines = "\n".join(f"  ・{r['talent_name']} → {r['hall_name']}" for r in raiten_list[:5])
+    return f"""あなたはパチンコ・パチスロ情報を発信するXアカウントです。
+{pref_hint}エリアの明日 {tomorrow_short} の来店イベント予告ツイートを作成してください。
+
+【明日の来店情報】
 {lines}
 
 【ルール】
 - ツイート本文のみ出力
 - 280文字以内
 - 絵文字で華やかに
-- 必ず「本日{today}」と正確な日付を入れる
+- 必ず「明日{tomorrow_short}」と日付を入れる
+- {pref_hint}エリアであることを明記
 - 誰がどこに来るか明確に
-- ハッシュタグ: #来店情報 #パチンコ #スロット と来店者名・店名
+- ハッシュタグ: #来店情報 #パチンコ #{pref_hint} と来店者名・店名
 - ファンが行きたくなる熱量で書く"""
+
+def build_event_prompt(analysis):
+    return build_yokoku_prompt(analysis)
