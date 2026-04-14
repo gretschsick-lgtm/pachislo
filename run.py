@@ -58,8 +58,7 @@ def step_event_post():
         print("  ⚠️ データ未蓄積 → 初回は分析スキップ")
         return
     tweet_text = poster.generate(poster.build_event_prompt(analysis))
-    target = next(iter(analysis["upcoming"]), None) or next(iter(analysis["overall_hot"]), None)
-    image_path = images.get_event_image(target) if target else None
+    target = next(iter(analysis.get("upcoming", [])), None) or next(iter(analysis.get("overall_hot", [])), None)
     _post_or_dry(tweet_text, image_path, label="通常イベント")
 
 
