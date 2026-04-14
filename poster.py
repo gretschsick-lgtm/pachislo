@@ -18,7 +18,6 @@ def _v2client():
 def _upload_image(path):
     try:
         media = _v1api().media_upload(filename=path)
-        print(f"[poster] メディアアップロード: {media.media_id}")
         return str(media.media_id)
     except Exception as e:
         print(f"[poster] 画像アップロード失敗: {e}")
@@ -37,38 +36,55 @@ def post(tweet_text, image_path=None):
 
 def build_event_prompt(analysis):
     today = analysis["today"]
+    tomorrow = analysis["tomorrow"]
     weekday = analysis["weekday"]
-    def fmt(items, key): return "\n".join(f"  ・{i[key]}（{i['cnt']}回）" for i in items) or "  （データ蓄積中）"
-    upcoming_txt = "\n".join(f"  ・{u['hall_name']} 「{u['event_name']}」 {u['event_date']}" for u in analysis["upcoming"]) or "  （なし）"
     stats = analysis["data_stats"]
+
+    # アツいホール3店舗
+    halls_txt = ""
+    for i, h in enumerate(analysis["hot_halls"], 1):
+        halls_txt += f"  {i}. {h['hall_name']}（過去{h['total_cnt']}回開催 / 直近30日{h['recent_cnt']}回）\n"
+    if not halls_txt: halls_txt = "  （データ蓄積中）\n"
+
+    # 明日のイベント
+    tomorrow_txt = ""
+    for e in analysis["tomorrow_events"]:
+        tomorrow_txt += f"  ・{e['hall_name']} 「{e['event_name']}」\n"
+    if not tomorrow_txt: tomorrow_txt = "  （なし）\n"
+
+    # 今日のイベント
+    today_txt = ""
+    for e in analysis["today_events"]:
+        today_txt += f"  ・{e['hall_name']} 「{e['event_name']}」\n"
+    if not today_txt: today_txt = "  （なし）\n"
+
+    # 曜日のアツいイベント
+    weekday_txt = ""
+    for e in analysis["weekday_hot"][:3]:
+        weekday_txt += f"  ・{e['event_name']}（{e['cnt']}回）\n"
+    if not weekday_txt: weekday_txt = "  （データ蓄積中）\n"
+
     return f"""あなたはパチンコ・パチスロ情報を発信するXアカウントです。
-過去データの分析結果をもとに「本日 {today}（{weekday}曜日）のアツいイベント情報」を告知するツイートを日本語で1つ作成してください。
+過去データの分析から本日 {today}（{weekday}曜日）のアツい情報をツイートしてください。
 
+【過去データから選んだアツいホールTOP3】
+{halls_txt}
+【本日のイベント】
+{today_txt}
+【明日 {tomorrow} のイベント】
+{tomorrow_txt}
 【{weekday}曜日によく開催されるアツいイベント】
-{fmt(analysis["weekday_hot"],'event_name')}
-
-【この時期に多いイベント】
-{fmt(analysis["monthday_hot"],'event_name')}
-
-【最近の人気イベントTop5】
-{fmt(analysis["overall_hot"][:5],'event_name')}
-
-【直近の注目予定】
-{upcoming_txt}
-
-【アクティブなホール】
-{fmt(analysis["top_halls"][:3],'hall_name')}
-
-【データ蓄積状況】{stats['total_events']}件 / {stats['days_accumulated']}日分
+{weekday_txt}
+【データ蓄積】{stats['total_events']}件 / {stats['days_accumulated']}日分
 
 【ルール】
 - ツイート本文のみ出力
 - 280文字以内
 - 絵文字で読みやすく
-- 具体的なイベント名・ホール名を入れる
-- ハッシュタグ4〜5個（#パチンコ #スロット #イベント情報 #今日のアツ台 など）
-- 「本日」「今日」など時制を明確に
-- データが少ない場合でも工夫して魅力的な文章にする"""
+- アツいホール3店舗を具体的に名前を出して紹介
+- 明日のイベントがあれば必ず入れる
+- ハッシュタグ4〜5個（#パチンコ #スロット #イベント情報 #今日のアツ台 #明日のイベント など）
+- データが少ない場合も工夫して書く"""
 
 def build_raiten_prompt(raiten_list):
     today = datetime.now().strftime("%Y年%m月%d日")
