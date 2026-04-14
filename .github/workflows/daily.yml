@@ -2,8 +2,8 @@ name: 🎰 パチンコBot 毎日自動投稿
 
 on:
   schedule:
-    - cron: "0 12 * * *"   # 21時 JST（明日のイベント予告）
-    - cron: "0 14 * * *"   # 23時 JST（今日のアツかった結果）
+    - cron: "0 12 * * *"    # 21時 JST（明日のイベント予告）
+    - cron: "30 15 * * *"   # 24時30分 JST（今日のアツかった結果）
   workflow_dispatch:
 
 jobs:
@@ -128,7 +128,7 @@ jobs:
           retention-days: 90
 
   tokyo-matome:
-    if: github.event.schedule == '0 14 * * *'
+    if: github.event.schedule == '30 15 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -168,7 +168,7 @@ jobs:
           retention-days: 90
 
   kanagawa-matome:
-    if: github.event.schedule == '0 14 * * *'
+    if: github.event.schedule == '30 15 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -208,7 +208,7 @@ jobs:
           retention-days: 90
 
   saitama-matome:
-    if: github.event.schedule == '0 14 * * *'
+    if: github.event.schedule == '30 15 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
