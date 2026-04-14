@@ -1,32 +1,5 @@
-import os, re, time, requests
-from bs4 import BeautifulSoup
+import os, re, time, tweepy
 from datetime import datetime, date, timedelta
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept-Language": "ja-JP,ja;q=0.9",
-}
-
-# ════════════════════════════════════════════
-# スクレイピング対象Xアカウント
-# ════════════════════════════════════════════
-HALL_X_ACCOUNTS = [
-    # イベント・来店まとめ系
-    "chanoma_777",       # 来店・取材情報毎日まとめ
-    "kata_sainokuni",    # 埼玉・東京の狙い目
-    "karasuro_7",        # 神奈川の明日のアツい店
-    "1_take6",           # 神奈川ホール調査・予想
-    "touslot",           # 東京・神奈川・埼玉まとめ
-    "slot_channel_",     # 関東全域情報まとめ
-    "kachigumimax",      # 全国ホール分析×来店×取材
-    "ainavipachislot",   # AIナビ関東版
-    "999999Q9Q",         # 東京マルハン情報
-    # ホール公式・店員
-    "endo1maruhan",      # マルハン新宿東宝ビル店員
-    "maruhan_yokoham",   # マルハンメガシティ横浜町田
-    "dynamjp",           # ダイナム公式
-    "pachislotenchou",   # マルハン店長系
-]
 
 def _parse_date(text):
     now = datetime.now()
@@ -45,136 +18,124 @@ def _parse_date(text):
             except ValueError: pass
     return ""
 
-def _is_event_tweet(text):
-    keywords = ["イベント","来店","全台","旧イベ","設定","特日","ガチ日","周年","記念","サービス","アツ","熱","取材","狙い","推し","快便","明日"]
-    return any(k in text for k in keywords)
+def _is_event(text):
+    return any(k in text for k in ["イベント","来店","全台","旧イベ","設定","特日","ガチ日","周年","記念","アツ","熱","取材","狙い","推し","快便","明日の"])
 
-def _is_raiten_tweet(text):
-    keywords = ["来店","来場","ゲスト","タレント","プロ","選手","取材"]
-    return any(k in text for k in keywords)
+def _is_raiten(text):
+    return any(k in text for k in ["来店","来場","ゲスト","タレント","プロ","選手","取材"])
 
 def _extract_event_name(text):
     for pat in [r"【([^】]{2,20})】", r"「([^」]{2,20})」",
-                r"(全台[^\s　。！]{0,10})", r"(旧イベ[^\s　。！]{0,10})",
-                r"(周年[^\s　。！]{0,10})"]:
+                r"(全台[^\s　。！]{0,10})", r"(旧イベ[^\s　。！]{0,10})"]:
         m = re.search(pat, text)
         if m: return m.group(1).strip()
     return text[:20].strip()
 
-def _extract_talent_name(text):
-    for pat in [r"([^\s　、。！]+(?:選手|さん|プロ|氏|女王))(?:が|の)?(?:来店|来場)",
+def _extract_talent(text):
+    for pat in [r"([^\s　、。！]+(?:選手|さん|プロ|氏))(?:が|の)?(?:来店|来場)",
                 r"(?:来店|来場)[：:]\s*([^\s　\n！。、]{2,15})",
-                r"【来店】([^\s　\n！。【】]{2,15})",
-                r"ゲスト[：:]\s*([^\s　\n！。、]{2,15})"]:
+                r"【来店】([^\s　\n！。【】]{2,15})"]:
         m = re.search(pat, text)
         if m: return m.group(1).strip()
     return "(来店者不明)"
 
-def _extract_hall_name(text):
-    """ツイートからホール名を抽出"""
-    patterns = [
-        r"(マルハン[^\s　。！\n]{1,15})",
-        r"(ピーアーク[^\s　。！\n]{1,15})",
-        r"(ガーデン[^\s　。！\n]{1,10})",
-        r"(キコーナ[^\s　。！\n]{1,10})",
-        r"(楽園[^\s　。！\n]{1,10})",
-        r"(ダイナム[^\s　。！\n]{1,10})",
-        r"(エスパス[^\s　。！\n]{1,10})",
-        r"(アビバ[^\s　。！\n]{1,10})",
-        r"(ジアス[^\s　。！\n]{1,10})",
-        r"(UNO[^\s　。！\n]{1,10})",
-        r"(123[^\s　。！\n]{1,10})",
-        r"(メッセ[^\s　。！\n]{1,10})",
-    ]
-    halls = []
-    for pat in patterns:
-        for m in re.finditer(pat, text):
-            halls.append(m.group(1).strip())
-    return halls[0] if halls else ""
+def _extract_hall(text):
+    for pat in [r"(マルハン[^\s　。！\n]{1,15})", r"(ピーアーク[^\s　。！\n]{1,15})",
+                r"(ガーデン[^\s　。！\n]{1,10})", r"(キコーナ[^\s　。！\n]{1,10})",
+                r"(楽園[^\s　。！\n]{1,10})", r"(ダイナム[^\s　。！\n]{1,10})",
+                r"(エスパス[^\s　。！\n]{1,10})", r"(アビバ[^\s　。！\n]{1,10})",
+                r"(ジアス[^\s　。！\n]{1,10})", r"(UNO[^\s　。！\n]{1,10})",
+                r"(123[^\s　。！\n]{1,10})", r"(メッセ[^\s　。！\n]{1,10})",
+                r"(ピーアーク[^\s　。！\n]{1,10})", r"(楽園[^\s　。！\n]{1,10})"]:
+        m = re.search(pat, text)
+        if m: return m.group(1).strip()
+    return ""
 
-def scrape_x_account(username: str) -> list[dict]:
-    """NitterミラーでXアカウントのツイートを取得"""
+# スクレイピング対象アカウント
+TARGET_ACCOUNTS = [
+    "chanoma_777", "kata_sainokuni", "karasuro_7", "1_take6",
+    "touslot", "slot_channel_", "kachigumimax", "ainavipachislot",
+    "999999Q9Q", "endo1maruhan", "maruhan_yokoham", "dynamjp", "pachislotenchou",
+]
+
+def _get_client():
+    return tweepy.Client(
+        bearer_token=os.environ.get("X_BEARER_TOKEN",""),
+        wait_on_rate_limit=True
+    )
+
+def _fetch_user_tweets(client, username: str) -> list[dict]:
     results = []
-    # 複数のNitterインスタンスを試す
-    nitter_hosts = [
-        "nitter.poast.org",
-        "nitter.privacydev.net",
-        "nitter.1d4.us",
-    ]
-    soup = None
-    for host in nitter_hosts:
-        url = f"https://{host}/{username}"
-        try:
-            resp = requests.get(url, headers=HEADERS, timeout=10)
-            if resp.status_code == 200:
-                soup = BeautifulSoup(resp.text, "html.parser")
-                break
-        except Exception:
-            continue
+    try:
+        user = client.get_user(username=username, user_fields=["id"])
+        if not user.data: return []
+        uid = user.data.id
 
-    if not soup:
-        print(f"[scraper] {username} 全Nitter失敗")
-        return []
+        resp = client.get_users_tweets(
+            id=uid,
+            max_results=20,
+            tweet_fields=["created_at","text","attachments"],
+            expansions=["attachments.media_keys"],
+            media_fields=["url","type"],
+            exclude=["retweets","replies"],
+        )
+        if not resp.data: return []
 
-    tweets = soup.select(".timeline-item")
-    for tweet in tweets[:30]:
-        text_el = tweet.select_one(".tweet-content")
-        if not text_el: continue
-        text = text_el.get_text(" ", strip=True)
-        if not _is_event_tweet(text): continue
+        media_map = {m.media_key: m for m in (resp.includes or {}).get("media", [])}
 
-        date_el = tweet.select_one(".tweet-date a")
-        date_str = date_el.get("title","") if date_el else ""
-        event_date = _parse_date(date_str) or _parse_date(text) or date.today().isoformat()
+        for tweet in resp.data:
+            text = tweet.text
+            if not _is_event(text): continue
 
-        img_el = tweet.select_one(".attachments img")
-        img_url = img_el.get("src","") if img_el else ""
-        if img_url.startswith("/"): img_url = f"https://{nitter_hosts[0]}" + img_url
+            event_date = _parse_date(text)
+            if not event_date:
+                event_date = tweet.created_at.strftime("%Y-%m-%d") if tweet.created_at else date.today().isoformat()
 
-        link_el = tweet.select_one(".tweet-date a")
-        tweet_url = f"https://x.com/{username}/status/" + (link_el["href"].split("/")[-1] if link_el else "")
+            img_url = ""
+            if tweet.attachments and tweet.attachments.get("media_keys"):
+                for mk in tweet.attachments["media_keys"]:
+                    media = media_map.get(mk)
+                    if media and media.type == "photo":
+                        img_url = media.url or ""
+                        break
 
-        hall_name = _extract_hall_name(text) or username
-
-        results.append({
-            "event_name": _extract_event_name(text),
-            "hall_name": hall_name,
-            "event_date": event_date,
-            "area": "",
-            "url": tweet_url,
-            "source": "x-scrape",
-            "raw_text": text[:200],
-            "img_url": img_url,
-            "is_raiten": _is_raiten_tweet(text),
-            "talent_name": _extract_talent_name(text) if _is_raiten_tweet(text) else "",
-        })
-
-    print(f"[scraper] {username}: {len(results)} 件")
-    time.sleep(1.5)
+            results.append({
+                "event_name": _extract_event_name(text),
+                "hall_name": _extract_hall(text) or username,
+                "event_date": event_date,
+                "area": "",
+                "url": f"https://x.com/{username}/status/{tweet.id}",
+                "source": "x-api",
+                "raw_text": text[:200],
+                "img_url": img_url,
+                "is_raiten": _is_raiten(text),
+                "talent_name": _extract_talent(text) if _is_raiten(text) else "",
+            })
+        print(f"[scraper] {username}: {len(results)} 件")
+        time.sleep(1)
+    except tweepy.TweepyException as e:
+        print(f"[scraper] {username} エラー: {e}")
     return results
 
 def scrape_events(prefecture_code="13", max_pages=5) -> list[dict]:
+    client = _get_client()
     results = []
-    for account in HALL_X_ACCOUNTS:
-        items = scrape_x_account(account)
-        for item in items:
+    for account in TARGET_ACCOUNTS:
+        for item in _fetch_user_tweets(client, account):
             if not item.get("is_raiten"):
                 results.append(item)
-    # 重複除去
     seen, unique = set(), []
     for ev in results:
         key = (ev.get("hall_name",""), ev.get("event_date",""))
-        if key not in seen:
-            seen.add(key)
-            unique.append(ev)
+        if key not in seen: seen.add(key); unique.append(ev)
     print(f"[scraper] イベント合計: {len(unique)} 件")
     return unique
 
 def scrape_all_raiten(prefecture_code="13", prefecture_hint="東京") -> list[dict]:
+    client = _get_client()
     results = []
-    for account in HALL_X_ACCOUNTS:
-        items = scrape_x_account(account)
-        for item in items:
+    for account in TARGET_ACCOUNTS:
+        for item in _fetch_user_tweets(client, account):
             if item.get("is_raiten"):
                 results.append({
                     "talent_name": item.get("talent_name","(来店者不明)"),
@@ -183,13 +144,11 @@ def scrape_all_raiten(prefecture_code="13", prefecture_hint="東京") -> list[di
                     "img_url": item.get("img_url",""),
                     "detail_url": item.get("url",""),
                     "raw_text": item.get("raw_text",""),
-                    "source": "x-scrape",
+                    "source": "x-api",
                 })
     seen, unique = set(), []
     for ev in results:
         key = (ev.get("hall_name",""), ev.get("talent_name",""))
-        if key not in seen:
-            seen.add(key)
-            unique.append(ev)
+        if key not in seen: seen.add(key); unique.append(ev)
     print(f"[scraper] 来店合計: {len(unique)} 件")
     return unique
