@@ -1,0 +1,56 @@
+name: 🎰 パチンコBot 毎日自動投稿
+
+on:
+  schedule:
+    - cron: "0 23 * * *"
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 過去データ（DB）を復元
+        uses: actions/cache@v4
+        with:
+          path: data/events.db
+          key: pachinko-db-${{ runner.os }}-${{ github.run_number }}
+          restore-keys: pachinko-db-${{ runner.os }}-
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 依存インストール
+        run: pip install -r requirements.txt
+
+      - name: フォント（日本語）インストール
+        run: sudo apt-get install -y fonts-ipafont-gothic -q
+
+      - name: Bot実行
+        env:
+          ANTHROPIC_API_KEY:      ${{ secrets.ANTHROPIC_API_KEY }}
+          X_API_KEY:              ${{ secrets.X_API_KEY }}
+          X_API_SECRET:           ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN:         ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_TOKEN_SECRET:  ${{ secrets.X_ACCESS_TOKEN_SECRET }}
+          X_BEARER_TOKEN:         ${{ secrets.X_BEARER_TOKEN }}
+          PREFECTURE_CODE: "14"
+          PREFECTURE_HINT: "神奈川"
+          SCRAPE_PAGES: "5"
+          DRY_RUN: "true"
+        run: python run.py
+
+      - name: DB・ログをアーティファクト保存
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-data-${{ github.run_number }}
+          path: |
+            data/
+            logs/
+          retention-days: 90
