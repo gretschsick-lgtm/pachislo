@@ -15,7 +15,6 @@ SEP  = "─" * 52
 SEP2 = "━" * 52
 TODAY = date.today().isoformat()
 
-
 def _post_or_dry(tweet_text, image_path, label):
     if DRY_RUN:
         print(f"\n🔒 DRY_RUN [{label}]")
@@ -28,18 +27,23 @@ def _post_or_dry(tweet_text, image_path, label):
         result["type"] = label
         store.save_post(result)
 
-
 def step_scrape():
     print(f"\n{SEP}")
     print(f"📡 [STEP 1] スクレイピング開始（{PREF_HINT}）")
     events = scraper.scrape_events(PREF_CODE, PAGES)
+    # ホールナビからも取得してマージ
+    try:
+        from scraper_hallnavi import scrape_hallnavi
+        hn_events = scrape_hallnavi(prefecture_code=PREF_CODE)
+        events = events + hn_events
+    except Exception as e:
+        print(f"[hallnavi] スキップ: {e}")
     if events:
         store.save_events(events, prefecture=PREF_HINT)
     raiten = scraper.scrape_all_raiten(PREF_CODE, PREF_HINT)
     if raiten:
         store.save_raiten(raiten, prefecture=PREF_HINT)
     print(f"  → イベント {len(events)} 件 / 来店 {len(raiten)} 件 をDBに保存")
-
 
 def step_yokoku():
     """21時投稿：明日のイベント予告"""
@@ -51,13 +55,11 @@ def step_yokoku():
     if stats["total_events"] == 0:
         print("  ⚠️ データ未蓄積 → スキップ")
         return
-
     tweet_text = poster.generate(poster.build_yokoku_prompt(analysis, PREF_HINT))
     target = next(iter(analysis.get("tomorrow_events", [])), None) or \
              next(iter(analysis.get("hot_halls", [])), None)
     image_path = images.get_event_image(target) if target else None
     _post_or_dry(tweet_text, image_path, label=f"予告_{PREF_HINT}")
-
     # 来店予告
     today_raiten = store.get_today_raiten(TODAY, prefecture=PREF_HINT)
     if today_raiten:
@@ -70,9 +72,8 @@ def step_yokoku():
         raiten_image = images.get_raiten_image(best)
         _post_or_dry(raiten_text, raiten_image, label=f"来店予告_{PREF_HINT}")
 
-
 def step_matome():
-    """23時投稿：今日のアツかったイベントまとめ"""
+    """0時30分投稿：今日のアツかったイベントまとめ"""
     print(f"\n{SEP}")
     print(f"📊 [まとめ] 今日のアツかった情報（{PREF_HINT}）")
     matome = store.get_today_matome(TODAY, prefecture=PREF_HINT)
@@ -82,24 +83,19 @@ def step_matome():
     tweet_text = poster.generate(poster.build_matome_prompt(matome, PREF_HINT))
     _post_or_dry(tweet_text, None, label=f"まとめ_{PREF_HINT}")
 
-
 def main():
     print(f"\n{SEP2}")
     print(f"🎰 パチンコBot  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f"   地域: {PREF_HINT}（コード: {PREF_CODE}）  POST_TYPE: {POST_TYPE}  DRY_RUN: {DRY_RUN}")
     print(SEP2)
-
     step_scrape()
-
     if POST_TYPE == "yokoku":
         step_yokoku()
     elif POST_TYPE == "matome":
         step_matome()
-
     print(f"\n{SEP2}")
     print("✅ 完了！")
     print(SEP2)
-
 
 if __name__ == "__main__":
     main()
