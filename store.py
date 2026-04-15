@@ -1,213 +1,363 @@
-import sqlite3
-from datetime import date, datetime, timedelta
-from pathlib import Path
+import os, re, time, tweepy
+from datetime import datetime, date
 
-DB_PATH = Path("data/events.db")
+def _parse_date(text):
+    now = datetime.now()
+    for fmt, pat in [
+        ("%Y年%m月%d日", r"\d{4}年\d{1,2}月\d{1,2}日"),
+        ("%m月%d日",     r"\d{1,2}月\d{1,2}日"),
+        ("%Y/%m/%d",    r"\d{4}/\d{1,2}/\d{1,2}"),
+        ("%m/%d",       r"\d{1,2}/\d{1,2}"),
+    ]:
+        m = re.search(pat, text)
+        if m:
+            try:
+                dt = datetime.strptime(m.group(), fmt)
+                if dt.year == 1900: dt = dt.replace(year=now.year)
+                return dt.strftime("%Y-%m-%d")
+            except ValueError: pass
+    return ""
 
-# Xアカウント名っぽい文字列を除外するためのホール名キーワード
-HALL_KEYWORDS = [
-    "マルハン","ピーアーク","楽園","ガーデン","ジアス","エスパス","キコーナ",
-    "アビバ","UNO","みとや","アイランド","PIA","SAP","ゴードン","プレサス",
-    "メガフェイス","やすだ","BIGディッパー","ラカータ","パラッツォ","123",
-    "ニラク","アミューズ","ダイナム","ベルシティ","Dステ","第一プラザ",
-    "エクスアリーナ","ライブガーデン","メガガイア","スーパーD","フジヤマ",
-    "ゴールド","ベガス","グランパ","ウエスタン","メッセ","オーパ","レッドロック",
-    "スパークル","キング","プライム","アサヒ","ジャラン","出玉王","大王",
-    "オリエント","グランド","三ノ輪","新橋","上尾","北越谷","みずほ台",
+def _is_event(text):
+    return any(k in text for k in [
+        "イベント","来店","全台","旧イベ","設定","特日","ガチ日","周年","記念",
+        "アツ","熱","取材","狙い","推し","快便","明日の","月イチ","ゾロ目",
+        "新装","特定日","抽選","収録","実践","スケジュール","予告",
+        "明日","今日","気になる","注目","OPEN","オープン","来店"
+    ])
+
+def _is_raiten(text):
+    return any(k in text for k in [
+        "来店","来場","ゲスト","取材","収録","実践来店",
+        "いそまる","よしき","じゃんじゃん","れんじろう","じゅりそん","るいべえ",
+        "木村魚拓","沖ヒカル","松本バッチ","青山りょう","水樹あや","倖田柚希",
+        "ガリぞう","嵐","ayasi","兎味ペロリナ","大崎一万発","スロパチガール",
+        "ガイモン","工藤らぎ","神谷玲子","ゆり姉","あゆあゆ","クワーマン",
+        "sasuke","タカハシカゴ","てつ","まいたけ","ちゅんげー","マッティー",
+        "橘リノ","あしなっくす","こしあん","ほしまみ","シーナ"
+    ])
+
+def _extract_event_name(text):
+    for pat in [r"【([^】]{2,20})】", r"「([^」]{2,20})」",
+                r"(全台[^\s　。！]{0,10})", r"(旧イベ[^\s　。！]{0,10})",
+                r"(周年[^\s　。！]{0,10})", r"(月イチ[^\s　。！]{0,10})"]:
+        m = re.search(pat, text)
+        if m: return m.group(1).strip()
+    return text[:20].strip()
+
+def _extract_talent(text):
+    known = [
+        "いそまる","よしき","じゃんじゃん","れんじろう","じゅりそん","るいべえ",
+        "木村魚拓","沖ヒカル","松本バッチ","青山りょう","水樹あや","倖田柚希",
+        "ガリぞう","嵐","ayasi","兎味ペロリナ","大崎一万発","スロパチガール",
+        "ガイモン","工藤らぎ","神谷玲子","ゆり姉","あゆあゆ","クワーマン",
+        "sasuke","タカハシカゴ","てつ","まいたけ","ちゅんげー","マッティー",
+        "橘リノ","あしなっくす","こしあん","ほしまみ","シーナ"
+    ]
+    for name in known:
+        if name in text: return name
+    for pat in [r"(?:来店|来場)[：:]\s*([^\s　\n！。、]{2,15})",
+                r"【来店】([^\s　\n！。【】]{2,15})"]:
+        m = re.search(pat, text)
+        if m: return m.group(1).strip()
+    return "(来店者不明)"
+
+def _extract_hall(text):
+    for pat in [
+        # 大手チェーン
+        r"(マルハン[^\s　。！\n、]{1,15})",
+        r"(ピーアーク[^\s　。！\n、]{1,15})",
+        r"(楽園[^\s　。！\n、]{1,10})",
+        r"(ガーデン[^\s　。！\n、]{1,10})",
+        r"(新！ガーデン[^\s　。！\n、]{1,10})",
+        r"(スマートガーデン[^\s　。！\n、]{1,10})",
+        r"(メガガーデン[^\s　。！\n、]{1,10})",
+        r"(ライブガーデン[^\s　。！\n、]{1,10})",
+        r"(キコーナ[^\s　。！\n、]{1,10})",
+        r"(グランキコーナ[^\s　。！\n、]{1,10})",
+        r"(エスパス[^\s　。！\n、]{1,10})",
+        r"(ジアス[^\s　。！\n、]{1,10})",
+        r"(ダイナム[^\s　。！\n、]{1,10})",
+        r"(ニラク[^\s　。！\n、]{1,10})",
+        r"(ガイア[^\s　。！\n、]{1,10})",
+        r"(メガガイア[^\s　。！\n、]{1,10})",
+        r"(ガイアネクスト[^\s　。！\n、]{1,10})",
+        r"(アイオン[^\s　。！\n、]{1,10})",
+        r"(D'station[^\s　。！\n、]{1,10})",
+        r"(Dステーション[^\s　。！\n、]{1,10})",
+        r"(Dステ[^\s　。！\n、]{1,10})",
+        r"(スーパーDステ[^\s　。！\n、]{1,10})",
+        r"(スーパーDステーション[^\s　。！\n、]{1,10})",
+        # 楽園系
+        r"(アビバ[^\s　。！\n、]{1,10})",
+        r"(ベルシティ[^\s　。！\n、]{1,10})",
+        # UNO系
+        r"(UNO[^\s　。！\n、]{1,10})",
+        r"(上尾UNO)",r"(北越谷UNO)",r"(みずほ台UNO)",
+        r"(上福岡UNO)",r"(北上尾UNO)",r"(朝霞UNO)",
+        r"(新橋UNO)",r"(三ノ輪UNO)",
+        # みとや系
+        r"(みとや[^\s　。！\n、]{1,15})",
+        # PIA系
+        r"(PIA[^\s　。！\n、]{1,10})",
+        # SAP
+        r"(SAP[^\s　。！\n、]{1,10})",
+        # BIGディッパー
+        r"(BIGディッパー[^\s　。！\n、]{1,10})",
+        r"(ビッグディッパー[^\s　。！\n、]{1,10})",
+        # パラッツォ
+        r"(パラッツォ[^\s　。！\n、]{1,10})",
+        # ラカータ
+        r"(ラカータ[^\s　。！\n、]{1,10})",
+        # 第一プラザ
+        r"(第一プラザ[^\s　。！\n、]{1,10})",
+        # エクスアリーナ
+        r"(エクスアリーナ[^\s　。！\n、]{1,10})",
+        r"(エクス・アリーナ[^\s　。！\n、]{1,10})",
+        r"(EXA[^\s　。！\n、]{1,10})",
+        # プレサス
+        r"(プレサス[^\s　。！\n、]{1,10})",
+        # ゴードン
+        r"(ゴードン[^\s　。！\n、]{1,10})",
+        # メガフェイス
+        r"(メガフェイス[^\s　。！\n、]{1,10})",
+        # やすだ
+        r"(やすだ[^\s　。！\n、]{1,10})",
+        # アイランド
+        r"(アイランド[^\s　。！\n、]{1,10})",
+        # メッセ
+        r"(メッセ[^\s　。！\n、]{1,10})",
+        # 123
+        r"(123[^\s　。！\n、]{1,10})",
+        # アミューズ
+        r"(アミューズ[^\s　。！\n、]{1,10})",
+        # グランパ
+        r"(グランパ[^\s　。！\n、]{1,10})",
+        # ウエスタン
+        r"(ウエスタン[^\s　。！\n、]{1,10})",
+        # スパークル
+        r"(スパークル[^\s　。！\n、]{1,10})",
+        # キング
+        r"(キングNo\.1[^\s　。！\n、]{1,10})",
+        r"(キング世田谷)",
+        r"(キング会館[^\s　。！\n、]{1,10})",
+        # オーシャン
+        r"(オーシャン[^\s　。！\n、]{1,10})",
+        r"(阿佐ヶ谷オーシャン)",r"(大山オーシャン)",r"(練馬オーシャン)",
+        # トワーズ
+        r"(トワーズ[^\s　。！\n、]{1,10})",
+        # フジヤマ
+        r"(フジヤマ[^\s　。！\n、]{1,10})",
+        # アサヒ
+        r"(アサヒ[^\s　。！\n、]{1,10})",
+        # ジャラン
+        r"(ジャラン[^\s　。！\n、]{1,10})",
+        # レッドロック
+        r"(レッドロック[^\s　。！\n、]{1,10})",
+        # プライム
+        r"(プライム[^\s　。！\n、]{1,10})",
+        # 出玉王
+        r"(出玉王[^\s　。！\n、]{1,10})",
+        # 大王
+        r"(大王[^\s　。！\n、]{1,10})",
+        # ベガスベガス
+        r"(ベガスベガス[^\s　。！\n、]{1,10})",
+        # ユーコーラッキー
+        r"(ユーコーラッキー[^\s　。！\n、]{1,10})",
+        # タイガー
+        r"(タイガー[^\s　。！\n、]{1,10})",
+        # 吉兆
+        r"(吉兆[^\s　。！\n、]{1,10})",
+        # 新ガーデン系
+        r"(パールショップともえ[^\s　。！\n、]{1,10})",
+        # ヒロキ
+        r"(ヒロキ[^\s　。！\n、]{1,10})",
+        # セブンS
+        r"(セブンS[^\s　。！\n、]{1,10})",
+        # フルハウス
+        r"(フルハウス[^\s　。！\n、]{1,10})",
+        # オーパ
+        r"(オーパ[^\s　。！\n、]{1,10})",
+        # ドラゴン
+        r"(ドラゴン[^\s　。！\n、]{1,10})",
+        # ARROW
+        r"(ARROW[^\s　。！\n、]{1,10})",
+        # ハリウッド
+        r"(ハリウッド[^\s　。！\n、]{1,10})",
+        # コトブキ
+        r"(コトブキ[^\s　。！\n、]{1,10})",
+        # アラジン
+        r"(アラジン[^\s　。！\n、]{1,10})",
+        # エランドール
+        r"(エランドール[^\s　。！\n、]{1,10})",
+        # サンパレス
+        r"(サンパレス[^\s　。！\n、]{1,10})",
+        # 有楽町DUO
+        r"(有楽町DUO)",
+        # みとやジャックポット
+        r"(みとやJP[^\s　。！\n、]{1,10})",
+        # グランドホール
+        r"(グランドホール[^\s　。！\n、]{1,10})",
+        # キューデン
+        r"(キューデン[^\s　。！\n、]{1,10})",
+        # パンドラ
+        r"(パンドラ[^\s　。！\n、]{1,10})",
+        r"(ビッグパンドラ[^\s　。！\n、]{1,10})",
+        # せんげん台
+        r"(せんげん台DUO)",
+        # スーパーライブガーデン
+        r"(スーパーライブガーデン[^\s　。！\n、]{1,10})",
+        # メガガーデン
+        r"(メガガーデン[^\s　。！\n、]{1,10})",
+        # オータ
+        r"(オータ[^\s　。！\n、]{1,10})",
+        # 一番舘
+        r"(一番舘[^\s　。！\n、]{1,10})",
+        # アスカ
+        r"(アスカ[^\s　。！\n、]{1,10})",
+        # マルホン
+        r"(マルホン[^\s　。！\n、]{1,10})",
+        # FACE
+        r"(FACE[^\s　。！\n、]{1,10})",
+        # サンラッキー
+        r"(サンラッキー[^\s　。！\n、]{1,10})",
+        # シーサイド
+        r"(シーサイド[^\s　。！\n、]{1,10})",
+        # ノア
+        r"(ノア[^\s　。！\n、]{1,10})",
+        # タイガー7
+        r"(タイガー7[^\s　。！\n、]{1,10})",
+        # M&M
+        r"(M&M[^\s　。！\n、]{1,10})",
+        # スクランブル
+        r"(スクランブル[^\s　。！\n、]{1,10})",
+        # SHIRON
+        r"(SHIRON[^\s　。！\n、]{1,10})",
+        # SHIROYAMA
+        r"(SHIROYAMA[^\s　。！\n、]{1,10})",
+    ]:
+        m = re.search(pat, text)
+        if m: return m.group(1).strip()
+    return ""
+
+# ════════════════════════════════════════════════════════════
+# スクレイピング対象アカウント（上位20件）
+# 月約3,600リクエスト → 無料プラン15,000の範囲内
+# ════════════════════════════════════════════════════════════
+TARGET_ACCOUNTS = [
+    "paapsaward",        # PAA：毎日全国来店・取材100件以上まとめ（最強）
+    "PAA_pmportal",      # PAAぱちんこメディアポータル
+    "chanoma_777",       # 茶の間：毎日来店・イベントまとめ
+    "slot_channel_",     # スロちゃん：関東全域まとめ屋
+    "touslot",           # 東スロ：東京・神奈川・埼玉予想まとめ
+    "slo1_tyousataiZ",   # スロイベ調査隊Z関東
+    "kata_sainokuni",    # 塊：埼玉・東京中心
+    "kachigumimax",      # Makotoパチスロ案内人
+    "ainavipachislot",   # AIナビ関東版
+    "ikechinpachislo",   # いけちん：関東データまとめ
+    "slot_ogikiti",      # 荻吉@スロ
+    "slotdekatu",        # ペカ男爵
+    "slotterguild",      # スロッターギルド
+    "999999Q9Q",         # ココイチ：東京マルハン情報
+    "ibentoan",          # 朧：スロットイベント案内
+    "slotchousatai",     # 関東スロパチ調査隊
+    "emepka",            # カリスマ：関東全国ホール情報
+    "karasuro_7",        # カラスロ@神奈川（毎日神奈川まとめ）
+    "norakobu",          # ノライーヌこぶへい：神奈川超詳細まとめ
+    "p_info_kanto",      # 関東パチスロ情報局P-info
 ]
 
-def _is_hall_name(name):
-    """Xアカウント名ではなく実際のホール名かどうか判定"""
-    if not name or len(name) < 2:
-        return False
-    return any(k in name for k in HALL_KEYWORDS)
-
-def get_conn():
-    DB_PATH.parent.mkdir(exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    _init_tables(conn)
-    return conn
-
-def _init_tables(conn):
-    conn.executescript("""
-    CREATE TABLE IF NOT EXISTS events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        scraped_on TEXT NOT NULL,
-        event_date TEXT,
-        event_name TEXT,
-        hall_name TEXT,
-        area TEXT,
-        url TEXT,
-        source TEXT DEFAULT 'x-api',
-        prefecture TEXT DEFAULT '',
-        created_at TEXT DEFAULT (datetime('now','localtime'))
-    );
-    CREATE TABLE IF NOT EXISTS raiten (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        scraped_on TEXT NOT NULL,
-        visit_date TEXT,
-        talent_name TEXT,
-        hall_name TEXT,
-        img_url TEXT,
-        detail_url TEXT,
-        source TEXT,
-        raw_text TEXT,
-        prefecture TEXT DEFAULT '',
-        created_at TEXT DEFAULT (datetime('now','localtime'))
-    );
-    CREATE TABLE IF NOT EXISTS posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        posted_on TEXT NOT NULL,
-        type TEXT,
-        tweet_id TEXT,
-        url TEXT,
-        tweet_text TEXT,
-        has_image INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT (datetime('now','localtime'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_events_date ON events(event_date);
-    CREATE INDEX IF NOT EXISTS idx_events_name ON events(event_name);
-    CREATE INDEX IF NOT EXISTS idx_raiten_date ON raiten(visit_date);
-    CREATE INDEX IF NOT EXISTS idx_events_pref ON events(prefecture);
-    """)
-    conn.commit()
-
-def save_events(events, prefecture=""):
-    today = date.today().isoformat()
-    conn = get_conn()
-    conn.executemany(
-        "INSERT INTO events (scraped_on,event_date,event_name,hall_name,area,url,source,prefecture) VALUES (:scraped_on,:event_date,:event_name,:hall_name,:area,:url,:source,:prefecture)",
-        [{"scraped_on":today,"event_date":e.get("event_date",""),"event_name":e.get("event_name",""),"hall_name":e.get("hall_name",""),"area":e.get("area",""),"url":e.get("url",""),"source":e.get("source","x-api"),"prefecture":prefecture} for e in events],
+def _get_client():
+    return tweepy.Client(
+        bearer_token=os.environ.get("X_BEARER_TOKEN",""),
+        wait_on_rate_limit=False
     )
-    conn.commit(); conn.close()
-    print(f"[store] イベント {len(events)} 件保存（{prefecture}）")
 
-def save_raiten(events, prefecture=""):
-    today = date.today().isoformat()
-    conn = get_conn()
-    conn.executemany(
-        "INSERT INTO raiten (scraped_on,visit_date,talent_name,hall_name,img_url,detail_url,source,raw_text,prefecture) VALUES (:scraped_on,:visit_date,:talent_name,:hall_name,:img_url,:detail_url,:source,:raw_text,:prefecture)",
-        [{"scraped_on":today,"visit_date":e.get("visit_date",""),"talent_name":e.get("talent_name",""),"hall_name":e.get("hall_name",""),"img_url":e.get("img_url",""),"detail_url":e.get("detail_url",""),"source":e.get("source",""),"raw_text":e.get("raw_text",""),"prefecture":prefecture} for e in events],
-    )
-    conn.commit(); conn.close()
-    print(f"[store] 来店 {len(events)} 件保存（{prefecture}）")
+def _fetch_user_tweets(client, username: str) -> list[dict]:
+    results = []
+    try:
+        user = client.get_user(username=username, user_fields=["id"])
+        if not user.data: return []
+        uid = user.data.id
 
-def save_post(post):
-    today = date.today().isoformat()
-    conn = get_conn()
-    conn.execute("INSERT INTO posts (posted_on,type,tweet_id,url,tweet_text,has_image) VALUES (?,?,?,?,?,?)",
-        (today,post.get("type"),post.get("tweet_id"),post.get("url"),post.get("tweet_text"),int(bool(post.get("has_image")))))
-    conn.commit(); conn.close()
+        resp = client.get_users_tweets(
+            id=uid,
+            max_results=20,
+            tweet_fields=["created_at","text","attachments"],
+            expansions=["attachments.media_keys"],
+            media_fields=["url","type"],
+            exclude=["retweets","replies"],
+        )
+        if not resp.data: return []
 
-def get_hot_events(today, lookback_days=90, prefecture=""):
-    conn = get_conn()
-    dt = datetime.strptime(today, "%Y-%m-%d")
-    weekday = dt.weekday()
-    tomorrow = (dt + timedelta(days=1)).strftime("%Y-%m-%d")
+        media_map = {m.media_key: m for m in (resp.includes or {}).get("media", [])}
 
-    pref_filter = "AND prefecture = :pref" if prefecture else ""
-    params_base = {"today": today, "lb": f"-{lookback_days} days", "pref": prefecture}
+        for tweet in resp.data:
+            text = tweet.text
+            if not _is_event(text): continue
 
-    # アツいホールTOP3（ホール名キーワードに一致するもののみ）
-    all_halls = conn.execute(f"""
-        SELECT hall_name, area, COUNT(*) as total_cnt,
-               SUM(CASE WHEN event_date >= date(:today, '-30 days') THEN 1 ELSE 0 END) as recent_cnt,
-               MAX(url) as url
-        FROM events
-        WHERE event_date >= date(:today, :lb)
-          AND hall_name != '' AND hall_name != '不明'
-          {pref_filter}
-        GROUP BY hall_name
-        ORDER BY recent_cnt DESC, total_cnt DESC
-        LIMIT 50
-    """, params_base).fetchall()
+            event_date = _parse_date(text)
+            if not event_date:
+                event_date = tweet.created_at.strftime("%Y-%m-%d") if tweet.created_at else date.today().isoformat()
 
-    # Xアカウント名を除外して実際のホール名だけ抽出
-    hot_halls = [dict(r) for r in all_halls if _is_hall_name(r["hall_name"])][:3]
+            img_url = ""
+            if tweet.attachments and tweet.attachments.get("media_keys"):
+                for mk in tweet.attachments["media_keys"]:
+                    media = media_map.get(mk)
+                    if media and media.type == "photo":
+                        img_url = media.url or ""
+                        break
 
-    # 明日のイベント
-    tomorrow_events = conn.execute(f"""
-        SELECT DISTINCT event_name, hall_name, event_date, area, url
-        FROM events
-        WHERE event_date = :tomorrow
-          AND event_name != '' AND event_name != '不明'
-          {pref_filter}
-        ORDER BY hall_name
-        LIMIT 5
-    """, {**params_base, "tomorrow": tomorrow}).fetchall()
+            results.append({
+                "event_name": _extract_event_name(text),
+                "hall_name": _extract_hall(text) or username,
+                "event_date": event_date,
+                "area": "",
+                "url": f"https://x.com/{username}/status/{tweet.id}",
+                "source": "x-api",
+                "raw_text": text[:200],
+                "img_url": img_url,
+                "is_raiten": _is_raiten(text),
+                "talent_name": _extract_talent(text) if _is_raiten(text) else "",
+            })
+        print(f"[scraper] {username}: {len(results)} 件")
+        time.sleep(0.5)
+    except tweepy.TweepyException as e:
+        print(f"[scraper] {username} エラー: {e}")
+    return results
 
-    # 今日のイベント
-    today_events = conn.execute(f"""
-        SELECT DISTINCT event_name, hall_name, event_date, area, url
-        FROM events
-        WHERE event_date = :today
-          AND event_name != '' AND event_name != '不明'
-          {pref_filter}
-        ORDER BY hall_name
-        LIMIT 5
-    """, params_base).fetchall()
+def scrape_events(prefecture_code="13", max_pages=5) -> list[dict]:
+    client = _get_client()
+    results = []
+    for account in TARGET_ACCOUNTS:
+        for item in _fetch_user_tweets(client, account):
+            if not item.get("is_raiten"):
+                results.append(item)
+    seen, unique = set(), []
+    for ev in results:
+        key = (ev.get("hall_name",""), ev.get("event_date",""))
+        if key not in seen: seen.add(key); unique.append(ev)
+    print(f"[scraper] イベント合計: {len(unique)} 件")
+    return unique
 
-    # 曜日別アツいイベント
-    weekday_hot = conn.execute(f"""
-        SELECT event_name, hall_name, COUNT(*) as cnt
-        FROM events
-        WHERE event_date >= date(:today, :lb)
-          AND event_date != ''
-          AND event_name != '' AND event_name != '不明'
-          AND CAST(strftime('%w', event_date) AS INTEGER) = :wd
-          {pref_filter}
-        GROUP BY event_name
-        ORDER BY cnt DESC
-        LIMIT 5
-    """, {**params_base, "wd": (weekday+1)%7}).fetchall()
-
-    total = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
-    days = conn.execute("SELECT COUNT(DISTINCT scraped_on) FROM events").fetchone()[0]
-    conn.close()
-
-    weekday_names = ["月","火","水","木","金","土","日"]
-    return {
-        "today": today,
-        "tomorrow": tomorrow,
-        "weekday": weekday_names[weekday],
-        "prefecture": prefecture,
-        "hot_halls": hot_halls,
-        "tomorrow_events": [dict(r) for r in tomorrow_events],
-        "today_events": [dict(r) for r in today_events],
-        "weekday_hot": [dict(r) for r in weekday_hot],
-        "data_stats": {"total_events": total, "days_accumulated": days},
-    }
-
-def get_today_raiten(today, prefecture=""):
-    conn = get_conn()
-    pref_filter = "AND prefecture = ?" if prefecture else ""
-    params = [today, prefecture] if prefecture else [today]
-    rows = conn.execute(
-        f"SELECT * FROM raiten WHERE visit_date = ? {pref_filter} ORDER BY created_at DESC",
-        params
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-def get_today_matome(today, prefecture=""):
-    conn = get_conn()
-    pref_filter = "AND prefecture = :pref" if prefecture else ""
-    params = {"today": today, "pref": prefecture}
-
-    all_halls = conn.execute(f"""
-        SELECT hall_name, GROUP_CONCAT(event_name, '、') as events,
-               COUNT(*) as cnt, MAX(url) as url
-        FROM events
-        WHERE scraped_on = :today
-          AND hall_name != '' AND hall_name != '不明'
-          {pref_filter}
-        GROUP BY hall_name
-        ORDER BY cnt DESC
-        LIMIT 20
-    """, params).fetchall()
-
-    # Xアカウント名を除外
-    result = [dict(r) for r in all_halls if _is_hall_name(r["hall_name"])][:3]
-    conn.close()
-    return result
+def scrape_all_raiten(prefecture_code="13", prefecture_hint="東京") -> list[dict]:
+    client = _get_client()
+    results = []
+    for account in TARGET_ACCOUNTS:
+        for item in _fetch_user_tweets(client, account):
+            if item.get("is_raiten"):
+                results.append({
+                    "talent_name": item.get("talent_name","(来店者不明)"),
+                    "hall_name": item.get("hall_name",""),
+                    "visit_date": item.get("event_date",""),
+                    "img_url": item.get("img_url",""),
+                    "detail_url": item.get("url",""),
+                    "raw_text": item.get("raw_text",""),
+                    "source": "x-api",
+                })
+    seen, unique = set(), []
+    for ev in results:
+        key = (ev.get("hall_name",""), ev.get("talent_name",""))
+        if key not in seen: seen.add(key); unique.append(ev)
+    print(f"[scraper] 来店合計: {len(unique)} 件")
+    return unique
