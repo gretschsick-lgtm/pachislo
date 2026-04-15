@@ -45,10 +45,18 @@ def build_yokoku_prompt(analysis, pref_hint="東京"):
 
     halls_txt = ""
     for i, h in enumerate(analysis.get("hot_halls", [])[:3], 1):
-        halls_txt += f"  {i}. {h['hall_name']}（過去{h['total_cnt']}回 / 直近30日{h['recent_cnt']}回）\n"
+        url = h.get("url","")
+        url_str = f" {url}" if url else ""
+        halls_txt += f"  {i}. {h['hall_name']}（過去{h['total_cnt']}回 / 直近30日{h['recent_cnt']}回）{url_str}\n"
     if not halls_txt: halls_txt = "  （データ蓄積中）\n"
 
-    tomorrow_txt = "\n".join(f"  ・{e['hall_name']} 「{e['event_name']}」" for e in analysis.get("tomorrow_events", [])) or "  （なし）"
+    tomorrow_txt = ""
+    for e in analysis.get("tomorrow_events", []):
+        url = e.get("url","")
+        url_str = f" {url}" if url else ""
+        tomorrow_txt += f"  ・{e['hall_name']} 「{e['event_name']}」{url_str}\n"
+    tomorrow_txt = tomorrow_txt or "  （なし）"
+
     weekday_txt = "\n".join(f"  ・{e['event_name']}（{e['cnt']}回）" for e in analysis.get("weekday_hot", [])[:3]) or "  （データ蓄積中）"
     stats = analysis.get("data_stats", {})
 
@@ -70,6 +78,7 @@ def build_yokoku_prompt(analysis, pref_hint="東京"):
 - 必ず「明日{tomorrow_short}」と日付を入れる
 - {pref_hint}エリアであることを明記
 - アツいホール名を具体的に入れる
+- 情報元のURLがあれば1つだけ自然に入れる
 - ハッシュタグ3〜4個（#パチスロ #パチンコ #{pref_hint} #明日のイベント）"""
 
 def build_matome_prompt(matome, pref_hint="東京"):
@@ -78,7 +87,9 @@ def build_matome_prompt(matome, pref_hint="東京"):
 
     halls_txt = ""
     for i, h in enumerate(matome[:3], 1):
-        halls_txt += f"  {i}. {h['hall_name']} 「{h['events']}」（{h['cnt']}件の話題）\n"
+        url = h.get("url","")
+        url_str = f" {url}" if url else ""
+        halls_txt += f"  {i}. {h['hall_name']} 「{h['events']}」（{h['cnt']}件の話題）{url_str}\n"
     if not halls_txt: halls_txt = "  （データなし）\n"
 
     return f"""あなたはパチンコ・パチスロ情報を発信するXアカウントです。
@@ -94,12 +105,19 @@ def build_matome_prompt(matome, pref_hint="東京"):
 - 必ず「本日{today}」と日付を入れる
 - {pref_hint}エリアであることを明記
 - 「今日アツかった」「話題になった」という表現を使う
+- 情報元のURLがあれば1つだけ自然に入れる
 - ハッシュタグ3〜4個（#パチスロ #パチンコ #{pref_hint} #今日のアツ台）"""
 
 def build_raiten_prompt(raiten_list, pref_hint="東京"):
     now = datetime.now()
     tomorrow_short = (now + timedelta(days=1)).strftime("%m月%d日")
-    lines = "\n".join(f"  ・{r['talent_name']} → {r['hall_name']}" for r in raiten_list[:5])
+
+    lines = ""
+    for r in raiten_list[:5]:
+        url = r.get("detail_url","")
+        url_str = f" {url}" if url else ""
+        lines += f"  ・{r['talent_name']} → {r['hall_name']}{url_str}\n"
+
     return f"""あなたはパチンコ・パチスロ情報を発信するXアカウントです。
 {pref_hint}エリアの明日 {tomorrow_short} の来店イベント予告ツイートを作成してください。
 
@@ -113,6 +131,7 @@ def build_raiten_prompt(raiten_list, pref_hint="東京"):
 - 必ず「明日{tomorrow_short}」と日付を入れる
 - {pref_hint}エリアであることを明記
 - 誰がどこに来るか明確に
+- 情報元のURLがあれば1つだけ自然に入れる
 - ハッシュタグ3〜4個（#来店情報 #パチスロ #{pref_hint} #パチンコ）
 - ファンが行きたくなる熱量で書く"""
 
