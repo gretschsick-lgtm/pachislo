@@ -1,248 +1,71 @@
-name: 🎰 パチンコBot 毎日自動投稿
+name: daily-post
 
 on:
   schedule:
-    - cron: "0 12 * * *"    # 21時 JST（明日のイベント予告）
-    - cron: "30 15 * * *"   # 24時30分 JST（今日のアツかった結果）
+    - cron: '0 12 * * *'   # 毎日21時JST（予告）
   workflow_dispatch:
+    inputs:
+      post_type:
+        description: 'POST_TYPE'
+        default: 'yokoku'
 
 jobs:
   tokyo-yokoku:
-    if: github.event.schedule == '0 12 * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
-        with:
-          path: data/events.db
-          key: pachinko-db-tokyo-${{ github.run_number }}
-          restore-keys: pachinko-db-tokyo-
-      - name: DBリセット
-        run: rm -f data/events.db
       - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - run: pip install -r requirements.txt
-      - run: sudo apt-get install -y fonts-ipafont-gothic -q
-      - name: Bot実行（東京・予告）
+        with: {python-version: '3.11'}
+      - run: pip install tweepy anthropic requests lxml beautifulsoup4
+      - run: python run.py
         env:
-          ANTHROPIC_API_KEY:     ${{ secrets.ANTHROPIC_API_KEY }}
-          X_API_KEY:             ${{ secrets.X_API_KEY }}
-          X_API_SECRET:          ${{ secrets.X_API_SECRET }}
-          X_ACCESS_TOKEN:        ${{ secrets.X_ACCESS_TOKEN }}
-          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
-          X_BEARER_TOKEN:        ${{ secrets.X_BEARER_TOKEN }}
-          PREFECTURE_CODE: "13"
-          PREFECTURE_HINT: "東京"
-          SCRAPE_PAGES: "5"
-          DRY_RUN: "false"
+          PREF_CODE: "13"
+          PREF_HINT: "東京"
           POST_TYPE: "yokoku"
-        run: python run.py
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: bot-data-tokyo-yokoku-${{ github.run_number }}
-          path: data/
-          retention-days: 90
+          DRY_RUN: "false"
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
 
   kanagawa-yokoku:
-    if: github.event.schedule == '0 12 * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
-        with:
-          path: data/events.db
-          key: pachinko-db-kanagawa-${{ github.run_number }}
-          restore-keys: pachinko-db-kanagawa-
-      - name: DBリセット
-        run: rm -f data/events.db
       - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - run: pip install -r requirements.txt
-      - run: sudo apt-get install -y fonts-ipafont-gothic -q
-      - name: Bot実行（神奈川・予告）
+        with: {python-version: '3.11'}
+      - run: pip install tweepy anthropic requests lxml beautifulsoup4
+      - run: python run.py
         env:
-          ANTHROPIC_API_KEY:     ${{ secrets.ANTHROPIC_API_KEY }}
-          X_API_KEY:             ${{ secrets.X_API_KEY }}
-          X_API_SECRET:          ${{ secrets.X_API_SECRET }}
-          X_ACCESS_TOKEN:        ${{ secrets.X_ACCESS_TOKEN }}
-          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
-          X_BEARER_TOKEN:        ${{ secrets.X_BEARER_TOKEN }}
-          PREFECTURE_CODE: "14"
-          PREFECTURE_HINT: "神奈川"
-          SCRAPE_PAGES: "5"
-          DRY_RUN: "false"
+          PREF_CODE: "14"
+          PREF_HINT: "神奈川"
           POST_TYPE: "yokoku"
-        run: python run.py
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: bot-data-kanagawa-yokoku-${{ github.run_number }}
-          path: data/
-          retention-days: 90
+          DRY_RUN: "false"
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
 
   saitama-yokoku:
-    if: github.event.schedule == '0 12 * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
-        with:
-          path: data/events.db
-          key: pachinko-db-saitama-${{ github.run_number }}
-          restore-keys: pachinko-db-saitama-
-      - name: DBリセット
-        run: rm -f data/events.db
       - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - run: pip install -r requirements.txt
-      - run: sudo apt-get install -y fonts-ipafont-gothic -q
-      - name: Bot実行（埼玉・予告）
+        with: {python-version: '3.11'}
+      - run: pip install tweepy anthropic requests lxml beautifulsoup4
+      - run: python run.py
         env:
-          ANTHROPIC_API_KEY:     ${{ secrets.ANTHROPIC_API_KEY }}
-          X_API_KEY:             ${{ secrets.X_API_KEY }}
-          X_API_SECRET:          ${{ secrets.X_API_SECRET }}
-          X_ACCESS_TOKEN:        ${{ secrets.X_ACCESS_TOKEN }}
-          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
-          X_BEARER_TOKEN:        ${{ secrets.X_BEARER_TOKEN }}
-          PREFECTURE_CODE: "11"
-          PREFECTURE_HINT: "埼玉"
-          SCRAPE_PAGES: "5"
-          DRY_RUN: "false"
+          PREF_CODE: "11"
+          PREF_HINT: "埼玉"
           POST_TYPE: "yokoku"
-        run: python run.py
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: bot-data-saitama-yokoku-${{ github.run_number }}
-          path: data/
-          retention-days: 90
-
-  tokyo-matome:
-    if: github.event.schedule == '30 15 * * *'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/cache@v4
-        with:
-          path: data/events.db
-          key: pachinko-db-tokyo-${{ github.run_number }}
-          restore-keys: pachinko-db-tokyo-
-      - name: DBリセット
-        run: rm -f data/events.db
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - run: pip install -r requirements.txt
-      - run: sudo apt-get install -y fonts-ipafont-gothic -q
-      - name: Bot実行（東京・まとめ）
-        env:
-          ANTHROPIC_API_KEY:     ${{ secrets.ANTHROPIC_API_KEY }}
-          X_API_KEY:             ${{ secrets.X_API_KEY }}
-          X_API_SECRET:          ${{ secrets.X_API_SECRET }}
-          X_ACCESS_TOKEN:        ${{ secrets.X_ACCESS_TOKEN }}
-          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
-          X_BEARER_TOKEN:        ${{ secrets.X_BEARER_TOKEN }}
-          PREFECTURE_CODE: "13"
-          PREFECTURE_HINT: "東京"
-          SCRAPE_PAGES: "5"
           DRY_RUN: "false"
-          POST_TYPE: "matome"
-        run: python run.py
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: bot-data-tokyo-matome-${{ github.run_number }}
-          path: data/
-          retention-days: 90
-
-  kanagawa-matome:
-    if: github.event.schedule == '30 15 * * *'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/cache@v4
-        with:
-          path: data/events.db
-          key: pachinko-db-kanagawa-${{ github.run_number }}
-          restore-keys: pachinko-db-kanagawa-
-      - name: DBリセット
-        run: rm -f data/events.db
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - run: pip install -r requirements.txt
-      - run: sudo apt-get install -y fonts-ipafont-gothic -q
-      - name: Bot実行（神奈川・まとめ）
-        env:
-          ANTHROPIC_API_KEY:     ${{ secrets.ANTHROPIC_API_KEY }}
-          X_API_KEY:             ${{ secrets.X_API_KEY }}
-          X_API_SECRET:          ${{ secrets.X_API_SECRET }}
-          X_ACCESS_TOKEN:        ${{ secrets.X_ACCESS_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
           X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
-          X_BEARER_TOKEN:        ${{ secrets.X_BEARER_TOKEN }}
-          PREFECTURE_CODE: "14"
-          PREFECTURE_HINT: "神奈川"
-          SCRAPE_PAGES: "5"
-          DRY_RUN: "false"
-          POST_TYPE: "matome"
-        run: python run.py
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: bot-data-kanagawa-matome-${{ github.run_number }}
-          path: data/
-          retention-days: 90
-
-  saitama-matome:
-    if: github.event.schedule == '30 15 * * *'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/cache@v4
-        with:
-          path: data/events.db
-          key: pachinko-db-saitama-${{ github.run_number }}
-          restore-keys: pachinko-db-saitama-
-      - name: DBリセット
-        run: rm -f data/events.db
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - run: pip install -r requirements.txt
-      - run: sudo apt-get install -y fonts-ipafont-gothic -q
-      - name: Bot実行（埼玉・まとめ）
-        env:
-          ANTHROPIC_API_KEY:     ${{ secrets.ANTHROPIC_API_KEY }}
-          X_API_KEY:             ${{ secrets.X_API_KEY }}
-          X_API_SECRET:          ${{ secrets.X_API_SECRET }}
-          X_ACCESS_TOKEN:        ${{ secrets.X_ACCESS_TOKEN }}
-          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
-          X_BEARER_TOKEN:        ${{ secrets.X_BEARER_TOKEN }}
-          PREFECTURE_CODE: "11"
-          PREFECTURE_HINT: "埼玉"
-          SCRAPE_PAGES: "5"
-          DRY_RUN: "false"
-          POST_TYPE: "matome"
-        run: python run.py
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: bot-data-saitama-matome-${{ github.run_number }}
-          path: data/
-          retention-days: 90
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
