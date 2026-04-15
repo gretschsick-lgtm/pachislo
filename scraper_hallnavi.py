@@ -7,8 +7,6 @@ HEADERS = {
     "Accept-Language": "ja,en;q=0.9",
 }
 
-# ホールナビの都道府県コード（JISコードとは異なる）
-# hall-navi.com の ken= パラメータ
 HALLNAVI_KEN = {
     "13": "13",  # 東京
     "14": "14",  # 神奈川
@@ -20,8 +18,10 @@ HALL_KEYWORDS = [
     "アビバ","UNO","みとや","アイランド","PIA","SAP","ゴードン","プレサス",
     "メガフェイス","やすだ","BIGディッパー","ラカータ","パラッツォ","123",
     "ニラク","アミューズ","ダイナム","ベルシティ","Dステ","第一プラザ",
-    "エクスアリーナ","ライブガーデン","メガガイア","上尾UNO","みずほ台UNO",
-    "北越谷UNO","朝霞UNO","スーパーDステ","ベルシティ","フジヤマ",
+    "エクスアリーナ","ライブガーデン","メガガイア","スーパーD","フジヤマ",
+    "ゴールド","ベガス","グランパ","ウエスタン","メッセ","オーパ","レッドロック",
+    "スパークル","キング","プライム","アサヒ","ジャラン","出玉王","大王",
+    "オリエント","グランド","三ノ輪","新橋","上尾","北越谷","みずほ台",
 ]
 
 def _get(url):
@@ -38,7 +38,6 @@ def _clean(text):
     return re.sub(r"\s+", " ", text or "").strip()
 
 def _make_event(hall_name, event_name, event_date, url, raw_text=""):
-    """store.save_events() が期待するキーに合わせた辞書を返す"""
     return {
         "event_name":  event_name or hall_name,
         "hall_name":   hall_name,
@@ -53,7 +52,6 @@ def _make_event(hall_name, event_name, event_date, url, raw_text=""):
     }
 
 def scrape_hallnavi(prefecture_code="13") -> list[dict]:
-    """ホールナビから明日のイベント・旧イベント情報を取得"""
     ken = HALLNAVI_KEN.get(prefecture_code, prefecture_code)
     tomorrow = (date.today() + timedelta(days=1)).strftime("%Y-%m-%d")
     results = []
@@ -78,7 +76,7 @@ def scrape_hallnavi(prefecture_code="13") -> list[dict]:
     time.sleep(1)
 
     # ② 取材スケジュール（関東）
-    url2 = f"https://hall-navi.com/serch_sche_2?area=kanto&pref={ken}"
+    url2 = f"https://hall-navi.com/serch_sche_2?area=kanto&ken={ken}"
     soup2 = _get(url2)
     before = len(results)
     if soup2:
@@ -90,10 +88,9 @@ def scrape_hallnavi(prefecture_code="13") -> list[dict]:
             hall_text  = _clean(cells[1].get_text()) if len(cells) > 1 else ""
             event_text = _clean(cells[2].get_text()) if len(cells) > 2 else ""
 
-            if not hall_text:
+            if not hall_text or not any(k in hall_text for k in HALL_KEYWORDS):
                 continue
 
-            # 日付パース（例: "4/16", "4月16日"）
             ev_date = tomorrow
             m = re.search(r"(\d{1,2})[/月](\d{1,2})", date_text)
             if m:
@@ -114,27 +111,7 @@ def scrape_hallnavi(prefecture_code="13") -> list[dict]:
             ))
         print(f"[hallnavi] スケジュール: {len(results)-before} 件")
 
-    time.sleep(1)
-
-    # ③ 旧イベント日ページ
-    url3 = f"https://hall-navi.com/kyuibeday_list?ken={ken}"
-    soup3 = _get(url3)
-    before2 = len(results)
-    if soup3:
-        for tag in soup3.find_all(["td","li","div","span"]):
-            text = _clean(tag.get_text())
-            if len(text) < 3 or len(text) > 60:
-                continue
-            if any(k in text for k in HALL_KEYWORDS):
-                results.append(_make_event(
-                    hall_name=text,
-                    event_name=f"旧イベント日",
-                    event_date=tomorrow,
-                    url=url3,
-                ))
-        print(f"[hallnavi] 旧イベント: {len(results)-before2} 件")
-
-    # 重複除去（hall_name + event_date）
+    # 重複除去
     seen, unique = set(), []
     for ev in results:
         key = (ev["hall_name"], ev["event_date"])
