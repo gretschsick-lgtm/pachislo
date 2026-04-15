@@ -28,11 +28,15 @@ def post(tweet_text, image_path=None):
     if image_path:
         mid = _upload_image(image_path)
         if mid: media_ids = [mid]
-    resp = _v2client().create_tweet(text=tweet_text, media_ids=media_ids)
-    tweet_id = resp.data["id"]
-    url = f"https://x.com/i/web/status/{tweet_id}"
-    print(f"[poster] 投稿完了: {url}")
-    return {"tweet_id": tweet_id, "url": url, "tweet_text": tweet_text, "has_image": bool(media_ids)}
+    try:
+        resp = _v2client().create_tweet(text=tweet_text, media_ids=media_ids)
+        tweet_id = resp.data["id"]
+        url = f"https://x.com/i/web/status/{tweet_id}"
+        print(f"[poster] 投稿完了: {url}")
+        return {"tweet_id": tweet_id, "url": url, "tweet_text": tweet_text, "has_image": bool(media_ids)}
+    except Exception as e:
+        print(f"[poster] 投稿失敗: {e}")
+        return {"tweet_id": "error", "url": "", "tweet_text": tweet_text, "has_image": False}
 
 def build_yokoku_prompt(analysis, pref_hint="東京"):
     now = datetime.now()
