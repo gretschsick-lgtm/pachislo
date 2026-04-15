@@ -40,10 +40,8 @@ def post(tweet_text, image_path=None):
 
 def build_yokoku_prompt(analysis, pref_hint="東京"):
     now = datetime.now()
-    today = now.strftime("%Y年%m月%d日")
-    weekday = ["月","火","水","木","金","土","日"][now.weekday()]
-    tomorrow = (now + timedelta(days=1)).strftime("%Y年%m月%d日")
     tomorrow_short = (now + timedelta(days=1)).strftime("%m月%d日")
+    weekday = ["月","火","水","木","金","土","日"][now.weekday()]
 
     halls_txt = ""
     for i, h in enumerate(analysis.get("hot_halls", [])[:3], 1):
@@ -71,13 +69,12 @@ def build_yokoku_prompt(analysis, pref_hint="東京"):
 - 絵文字で読みやすく
 - 必ず「明日{tomorrow_short}」と日付を入れる
 - {pref_hint}エリアであることを明記
-- アツいホール3店舗を具体的に紹介
-- ハッシュタグ4〜5個（#パチンコ #スロット #{pref_hint} #明日のイベント #パチスロ）"""
+- アツいホール名を具体的に入れる
+- ハッシュタグ3〜4個（#パチスロ #パチンコ #{pref_hint} #明日のイベント）"""
 
 def build_matome_prompt(matome, pref_hint="東京"):
     now = datetime.now()
-    today = now.strftime("%Y年%m月%d日")
-    weekday = ["月","火","水","木","金","土","日"][now.weekday()]
+    today = now.strftime("%m月%d日")
 
     halls_txt = ""
     for i, h in enumerate(matome[:3], 1):
@@ -97,11 +94,10 @@ def build_matome_prompt(matome, pref_hint="東京"):
 - 必ず「本日{today}」と日付を入れる
 - {pref_hint}エリアであることを明記
 - 「今日アツかった」「話題になった」という表現を使う
-- ハッシュタグ4〜5個（#パチンコ #スロット #{pref_hint} #今日のアツ台 #パチスロ）"""
+- ハッシュタグ3〜4個（#パチスロ #パチンコ #{pref_hint} #今日のアツ台）"""
 
 def build_raiten_prompt(raiten_list, pref_hint="東京"):
     now = datetime.now()
-    tomorrow = (now + timedelta(days=1)).strftime("%Y年%m月%d日")
     tomorrow_short = (now + timedelta(days=1)).strftime("%m月%d日")
     lines = "\n".join(f"  ・{r['talent_name']} → {r['hall_name']}" for r in raiten_list[:5])
     return f"""あなたはパチンコ・パチスロ情報を発信するXアカウントです。
@@ -117,7 +113,7 @@ def build_raiten_prompt(raiten_list, pref_hint="東京"):
 - 必ず「明日{tomorrow_short}」と日付を入れる
 - {pref_hint}エリアであることを明記
 - 誰がどこに来るか明確に
-- ハッシュタグ: #来店情報 #パチンコ #{pref_hint} と来店者名・店名
+- ハッシュタグ3〜4個（#来店情報 #パチスロ #{pref_hint} #パチンコ）
 - ファンが行きたくなる熱量で書く"""
 
 def build_event_prompt(analysis):
