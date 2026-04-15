@@ -81,23 +81,20 @@ def _extract_hall(text):
         r"(グランキコーナ[^\s　。！\n、]{1,10})", r"(ユーコーラッキー[^\s　。！\n、]{1,10})",
         r"(SAP[^\s　。！\n、]{1,10})", r"(BIGディッパー[^\s　。！\n、]{1,10})",
         r"(みとや[^\s　。！\n、]{1,10})", r"(アミューズ[^\s　。！\n、]{1,10})",
-        r"(フジヤマ[^\s　。！\n、]{1,10})", r"(ラカータ[^\s　。！\n、]{1,10})",
+        r"(フジヤマ[^\s　。！\n、]{1,10})",
     ]:
         m = re.search(pat, text)
         if m: return m.group(1).strip()
     return ""
 
 # ════════════════════════════════════════════════════════════
-# スクレイピング対象アカウント 総計約120件
+# スクレイピング対象アカウント（上位20件に絞る）
+# 月約3,600リクエスト → 無料プラン15,000の範囲内
 # ════════════════════════════════════════════════════════════
 TARGET_ACCOUNTS = [
-
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 【情報まとめ系・関東全域】
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    "paapsaward",        # PAA：全国来店・取材情報毎日まとめ（超優良）
+    "paapsaward",        # PAA：毎日全国来店・取材100件以上まとめ（最強）
     "PAA_pmportal",      # PAAぱちんこメディアポータル
-    "chanoma_777",       # 茶の間：来店・イベント毎日まとめ
+    "chanoma_777",       # 茶の間：毎日来店・イベントまとめ
     "slot_channel_",     # スロちゃん：関東全域まとめ屋
     "touslot",           # 東スロ：東京・神奈川・埼玉予想まとめ
     "slo1_tyousataiZ",   # スロイベ調査隊Z関東
@@ -110,130 +107,17 @@ TARGET_ACCOUNTS = [
     "slotterguild",      # スロッターギルド
     "999999Q9Q",         # ココイチ：東京マルハン情報
     "ibentoan",          # 朧：スロットイベント案内
-    "MH_Tencho0220",     # 元マルハン店長いっぺー
     "slotchousatai",     # 関東スロパチ調査隊
     "emepka",            # カリスマ：関東全国ホール情報
-    "youbun_help",       # スロット養分救済カレンダー
-    "p_info_kanto",      # 関東パチスロ情報局P-info
-    "hikari_pachi777",   # ひかりパチスロ日和：明日の来店まとめ
-    "onigiri_slot",      # おにぎりスロット：東京・神奈川まとめ
-
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 【神奈川専門まとめ系】
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     "karasuro_7",        # カラスロ@神奈川（毎日神奈川まとめ）
-    "1_take6",           # Take6：神奈川ホール調査・配信
     "norakobu",          # ノライーヌこぶへい：神奈川超詳細まとめ
-    "slokatsudon",       # スロかつ丼：神奈川ホール期待度まとめ
-    "slot_pro_megan",    # スロプロ眼鏡：抽選人数まとめ
-
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 【スロパチステーション演者・取材班】
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    "SloPachi_Sta",      # スロパチステーション取材班公式
-    "isomaru_sps1",      # いそまる
-    "yoshiki_sps",       # よしき
-    "janjan_sps",        # じゃんじゃん
-    "renjiro_sps",       # れんじろう
-    "jurison_sps",       # じゅりそん
-    "ruibee_sps",        # るいべえ
-
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 【きむちゃんねる・人気演者】
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    "kimuragyotakuG",    # 木村魚拓
-    "okihikaranai",      # 沖ヒカル
-    "matsumotobatch",    # 松本バッチ
-    "Aoyama_Ryo",        # 青山りょう
-    "mizukiaya777",      # 水樹あや
-    "anotherarashi",     # 嵐
-    "ayasi0530",         # ayasi
-    "perolina_usami",    # 兎味ペロリナ
-    "garizo2",           # ガリぞう
-    "yu_zukizuki",       # 倖田柚希
-    "kimu_channel",      # きむちゃんねる公式
-
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 【東京 エスパス日拓各店公式】
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    "kabupa777",         # エスパス新宿歌舞伎町（かぶぱ）
-    "espace_kabuki",     # エスパス新宿歌舞伎町【公式】
-    "espaceakihabara",   # エスパス秋葉原駅前（エスパだっちゃ）
-    "akibaespace",       # エスパス秋葉原駅前【公式】
-    "espaceseibu1",      # エスパス西武新宿駅前
-    "espace_sby1",       # エスパス渋谷本館
-    "shibuyaekimae0",    # エスパス渋谷駅前新館
-    "espace_ueno1214",   # エスパス上野新館
-    "ueno_honkan0821",   # エスパス上野本館（ぱんちゃん）
-    "ESPACE_akasaka1",   # エスパス赤坂見附駅前
-
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 【東京 楽園・その他ホール公式】
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    "rakuen_kamata",     # 楽園蒲田
-    "rakuenikebukuro",   # 楽園池袋
-    "ooyama_rakuen",     # 楽園ハッピーロード大山
-    "ishikawa_rakuen",   # 楽園大山 店長石川
-    "akiba_island",      # アイランド秋葉原
-    "MaruhanOfficial",   # マルハン公式
-    "maruhan_toho",      # マルハン新宿東宝ビル
-    "endo1maruhan",      # マルハン店員エンドウ
-    "maruhankamata",     # マルハン蒲田
-    "maruhan_hino",      # マルハン日野
-    "pachislotenchou",   # マルハン店長系
-    "dynamjp",           # ダイナム公式
-    "hirokiwest66666",   # ヒロキ蒲田西口
-    "hiroki_higashi2",   # ヒロキ東口
-    "kicona_yodamaru",   # キコーナ淀川丸
-    "PS_garden_ch",      # ガーデン公式ch
-    "3too9_kamata_39",   # 蒲田系ホール
-
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 【神奈川 ホール公式】
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    "kawasaki_rakuen",   # 楽園川崎店【公式】
-    "rakuen_sagami",     # 楽園相模原店【公式】
-    "shinjo_stage",      # ピーアーク神奈川公式（相模大野・新城・相模原）
-    "sagamihara0429",    # ピーアーク相模原
-    "sagachan_park",     # ピーアーク相模大野アンバサダー
-    "ZIATH_Ofuna",       # ジアス大船【公式】
-    "singardentotuka",   # 新！ガーデン戸塚【公式】
-    "maruhan_yokoham",   # マルハンメガシティ横浜
-    "kanagawa_kicona",   # キコーナ神奈川
-    "Kicona_ebina",      # キコーナ海老名
-    "KNakamachidai",     # キコーナ中山台
-
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 【埼玉 ガーデン系列公式】
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    "gardenkitayono",    # ガーデン北与野
-    "garden_yono",       # ガーデン与野
-    "gardenkitatoda",    # ガーデン北戸田
-    "KawagutiAngyo",     # 新！ガーデン川口安行【公式】
-    "g_nishiurawa",      # 新！ガーデン西浦和【公式】
-    "g_kasukabe",        # 新！ガーデン春日部【公式】
-    "GARDENgashimiya",   # ガーデン東大宮
-    "g_higashiurawa",    # ガーデン東浦和【公式】
-    "Smart_G_Musaura",   # スマートガーデン武蔵浦和【公式】
-    "2288g_yashio_28",   # 新！ガーデン八潮【公式】
-
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # 【埼玉 ピーアーク・その他ホール公式】
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    "park_saitama",      # ピーアーク埼玉公式
-    "P_Ark_Soka",        # ピーアーク草加店長
-    "PKawaguchi30785",   # PIA川口【公式】
-    "SAPsouka",          # SAP草加【公式】
-    "p_megatoko",        # メガトーコー
+    "p_info_kanto",      # 関東パチスロ情報局P-info
 ]
-
-# 重複除去
-TARGET_ACCOUNTS = list(dict.fromkeys(TARGET_ACCOUNTS))
 
 def _get_client():
     return tweepy.Client(
         bearer_token=os.environ.get("X_BEARER_TOKEN",""),
-        wait_on_rate_limit=True
+        wait_on_rate_limit=False
     )
 
 def _fetch_user_tweets(client, username: str) -> list[dict]:
