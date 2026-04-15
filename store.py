@@ -4,6 +4,24 @@ from pathlib import Path
 
 DB_PATH = Path("data/events.db")
 
+# Xアカウント名っぽい文字列を除外するためのホール名キーワード
+HALL_KEYWORDS = [
+    "マルハン","ピーアーク","楽園","ガーデン","ジアス","エスパス","キコーナ",
+    "アビバ","UNO","みとや","アイランド","PIA","SAP","ゴードン","プレサス",
+    "メガフェイス","やすだ","BIGディッパー","ラカータ","パラッツォ","123",
+    "ニラク","アミューズ","ダイナム","ベルシティ","Dステ","第一プラザ",
+    "エクスアリーナ","ライブガーデン","メガガイア","スーパーD","フジヤマ",
+    "ゴールド","ベガス","グランパ","ウエスタン","メッセ","オーパ","レッドロック",
+    "スパークル","キング","プライム","アサヒ","ジャラン","出玉王","大王",
+    "オリエント","グランド","三ノ輪","新橋","上尾","北越谷","みずほ台",
+]
+
+def _is_hall_name(name):
+    """Xアカウント名ではなく実際のホール名かどうか判定"""
+    if not name or len(name) < 2:
+        return False
+    return any(k in name for k in HALL_KEYWORDS)
+
 def get_conn():
     DB_PATH.parent.mkdir(exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -86,27 +104,29 @@ def get_hot_events(today, lookback_days=90, prefecture=""):
     conn = get_conn()
     dt = datetime.strptime(today, "%Y-%m-%d")
     weekday = dt.weekday()
-    month_day = today[5:]
     tomorrow = (dt + timedelta(days=1)).strftime("%Y-%m-%d")
 
-    # 都道府県フィルタ条件
     pref_filter = "AND prefecture = :pref" if prefecture else ""
     params_base = {"today": today, "lb": f"-{lookback_days} days", "pref": prefecture}
 
-    # 地域ごとにアツいホールTOP3
-    hot_halls = conn.execute(f"""
+    # アツいホールTOP3（ホール名キーワードに一致するもののみ）
+    all_halls = conn.execute(f"""
         SELECT hall_name, area, COUNT(*) as total_cnt,
-               SUM(CASE WHEN event_date >= date(:today, '-30 days') THEN 1 ELSE 0 END) as recent_cnt
+               SUM(CASE WHEN event_date >= date(:today, '-30 days') THEN 1 ELSE 0 END) as recent_cnt,
+               MAX(url) as url
         FROM events
         WHERE event_date >= date(:today, :lb)
           AND hall_name != '' AND hall_name != '不明'
           {pref_filter}
         GROUP BY hall_name
         ORDER BY recent_cnt DESC, total_cnt DESC
-        LIMIT 3
+        LIMIT 50
     """, params_base).fetchall()
 
-    # 明日のイベント（地域別）
+    # Xアカウント名を除外して実際のホール名だけ抽出
+    hot_halls = [dict(r) for r in all_halls if _is_hall_name(r["hall_name"])][:3]
+
+    # 明日のイベント
     tomorrow_events = conn.execute(f"""
         SELECT DISTINCT event_name, hall_name, event_date, area, url
         FROM events
@@ -117,7 +137,7 @@ def get_hot_events(today, lookback_days=90, prefecture=""):
         LIMIT 5
     """, {**params_base, "tomorrow": tomorrow}).fetchall()
 
-    # 今日のイベント（地域別）
+    # 今日のイベント
     today_events = conn.execute(f"""
         SELECT DISTINCT event_name, hall_name, event_date, area, url
         FROM events
@@ -128,7 +148,7 @@ def get_hot_events(today, lookback_days=90, prefecture=""):
         LIMIT 5
     """, params_base).fetchall()
 
-    # 曜日別アツいイベント（地域別）
+    # 曜日別アツいイベント
     weekday_hot = conn.execute(f"""
         SELECT event_name, hall_name, COUNT(*) as cnt
         FROM events
@@ -152,7 +172,7 @@ def get_hot_events(today, lookback_days=90, prefecture=""):
         "tomorrow": tomorrow,
         "weekday": weekday_names[weekday],
         "prefecture": prefecture,
-        "hot_halls": [dict(r) for r in hot_halls],
+        "hot_halls": hot_halls,
         "tomorrow_events": [dict(r) for r in tomorrow_events],
         "today_events": [dict(r) for r in today_events],
         "weekday_hot": [dict(r) for r in weekday_hot],
@@ -171,22 +191,23 @@ def get_today_raiten(today, prefecture=""):
     return [dict(r) for r in rows]
 
 def get_today_matome(today, prefecture=""):
-    """23時まとめ用：今日Xで話題になったホール情報"""
     conn = get_conn()
     pref_filter = "AND prefecture = :pref" if prefecture else ""
     params = {"today": today, "pref": prefecture}
 
-    # 今日収集したデータから話題のホールTOP3
-    hot_today = conn.execute(f"""
-        SELECT hall_name, GROUP_CONCAT(event_name, '、') as events, COUNT(*) as cnt
+    all_halls = conn.execute(f"""
+        SELECT hall_name, GROUP_CONCAT(event_name, '、') as events,
+               COUNT(*) as cnt, MAX(url) as url
         FROM events
         WHERE scraped_on = :today
           AND hall_name != '' AND hall_name != '不明'
           {pref_filter}
         GROUP BY hall_name
         ORDER BY cnt DESC
-        LIMIT 3
+        LIMIT 20
     """, params).fetchall()
 
+    # Xアカウント名を除外
+    result = [dict(r) for r in all_halls if _is_hall_name(r["hall_name"])][:3]
     conn.close()
-    return [dict(r) for r in hot_today]
+    return result
