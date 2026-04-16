@@ -1,11 +1,3 @@
-import re, io
-from PIL import Image, ImageDraw, ImageFont
-from datetime import datetime
-from pathlib import Path
-
-OUTPUT_DIR = Path("images")
-OUTPUT_DIR.mkdir(exist_ok=True)
-
 def _get_font(size):
     """フォントを取得（システムフォントにフォールバック）"""
     font_paths = [
@@ -174,3 +166,4 @@ def get_raiten_image(raiten, pref_hint="東京"):
     except Exception as e:
         print(f"[images] 来店画像生成失敗: {e}")
         return None
+
