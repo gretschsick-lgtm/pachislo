@@ -19,6 +19,7 @@ jobs:
       - run: pip install tweepy anthropic requests lxml beautifulsoup4 Pillow
       - run: python run.py
         env:
+          PYTHONUNBUFFERED: "1"
           PREF_CODE: "13"
           PREF_HINT: "東京"
           POST_TYPE: "yokoku"
@@ -39,6 +40,7 @@ jobs:
       - run: pip install tweepy anthropic requests lxml beautifulsoup4 Pillow
       - run: python run.py
         env:
+          PYTHONUNBUFFERED: "1"
           PREF_CODE: "14"
           PREF_HINT: "神奈川"
           POST_TYPE: "yokoku"
@@ -59,6 +61,7 @@ jobs:
       - run: pip install tweepy anthropic requests lxml beautifulsoup4 Pillow
       - run: python run.py
         env:
+          PYTHONUNBUFFERED: "1"
           PREF_CODE: "11"
           PREF_HINT: "埼玉"
           POST_TYPE: "yokoku"
